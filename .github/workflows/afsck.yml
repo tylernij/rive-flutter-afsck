@@ -1,0 +1,82 @@
+name: Automatic File Size Check
+
+on:
+  workflow_dispatch:
+
+jobs:
+  run-afsck:
+    name: Run AFSCK
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Linux dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: "3.24.0"
+          channel: stable
+          cache: true
+
+      - name: Create new project
+        run: |
+          flutter create afsck_blank
+          cd afsck_blank
+          flutter pub get
+
+      - name: Build for all platforms (before Rive)
+        working-directory: afsck_blank
+        run: |
+          flutter build apk --release
+          flutter build appbundle --release
+          flutter build linux --release
+          flutter build web --release
+
+      - name: Store build artifacts (before)
+        run: |
+          mkdir -p before/
+          cp afsck_blank/build/app/outputs/flutter-apk/app-release.apk before/
+          cp afsck_blank/build/app/outputs/bundle/release/app-release.aab before/
+          cp -r afsck_blank/build/linux/x64/release/bundle before/linux
+          cp -r afsck_blank/build/web before/web
+
+      - name: Add Rive dependency
+        working-directory: afsck_blank
+        run: |
+          flutter pub add rive
+          flutter pub get
+
+      - name: Build for all platforms (after Rive)
+        working-directory: afsck_blank
+        run: |
+          flutter build apk --release
+          flutter build appbundle --release
+          flutter build linux --release
+          flutter build web --release
+
+      - name: Store new build artifacts (after)
+        run: |
+          mkdir -p after/
+          cp afsck_blank/build/app/outputs/flutter-apk/app-release.apk after/
+          cp afsck_blank/build/app/outputs/bundle/release/app-release.aab after/
+          cp -r afsck_blank/build/linux/x64/release/bundle after/linux
+          cp -r afsck_blank/build/web after/web
+
+      - name: Log build artifact file sizes
+        run: |
+          echo "=== BEFORE Rive ==="
+          du -sh before/*
+          echo ""
+          echo "=== AFTER Rive ==="
+          du -sh after/*
+          echo ""
+          echo "=== SIZE DIFFERENCE ==="
+          du -sb before/ after/
+
+      - name: Clean up
+        run: rm -rf afsck_blank
